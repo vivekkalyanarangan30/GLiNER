@@ -62,8 +62,6 @@ for entity in entities:
     print(entity["text"], "=>", entity["label"])
 ```
 
-Alternatively, pass `packing_config=packing` directly to `run`/`batch_predict_with_embeds` when you need per-call control. Packing plays nicely with the optional GLiNER RNN layers because the encoder restores each segment before the recurrent module executes.
-
 #### Expected Output
 
 ```

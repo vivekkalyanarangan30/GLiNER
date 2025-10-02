@@ -62,6 +62,25 @@ for entity in entities:
     print(entity["text"], "=>", entity["label"])
 ```
 
+#### Speed up batched inference with sequence packing
+
+Packing short requests into block-diagonal streams keeps attention and recurrent layers focused on real tokens:
+
+```python
+from gliner.infer_packing import InferencePackingConfig
+
+packing = InferencePackingConfig(max_length=512)
+model.configure_inference_packing(packing)
+
+entities = model.run(
+    ["Short sentence one.", "Second request."],
+    labels,
+    batch_size=2,
+)
+```
+
+Alternatively, pass `packing_config=packing` directly to `run`/`batch_predict_with_embeds` when you need per-call control. Packing plays nicely with the optional GLiNER RNN layers because the encoder restores each segment before the recurrent module executes.
+
 #### Expected Output
 
 ```

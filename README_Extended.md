@@ -204,6 +204,71 @@ UEFA Nations League => competitions
 European Championship => competitions
 ```
 
+### ⚡️ Inference Sequence Packing (Transformer & RNN stacks)
+
+GLiNER now supports optional **sequence packing** during inference to reduce padding FLOPs and keep attention/RNN work proportional to the real token count. Packing works with every encoder backbone as well as the optional LSTM/RNN layers—packed segments stay block-diagonal so recurrent states never mix tokens from different requests.
+
+```python
+from gliner import GLiNER
+from gliner.infer_packing import InferencePackingConfig
+
+model = GLiNER.from_pretrained("urchade/gliner_medium-v2.1")
+model.configure_inference_packing(
+    InferencePackingConfig(
+        max_length=512,
+        sep_token_id=model.data_processor.transformer_tokenizer.sep_token_id,
+    )
+)
+
+texts = ["Short sentence one.", "Another sample to batch together."]
+labels = ["Person", "Organization", "Date"]
+
+# Packing happens automatically inside `run` / `batch_predict_with_embeds`.
+entities = model.run(texts, labels, batch_size=2)
+```
+
+To keep per-call control you can also pass the configuration directly:
+
+```python
+packing = InferencePackingConfig(max_length=512)
+entities = model.run(texts, labels, batch_size=2, packing_config=packing)
+```
+
+For lower-level access you can build packed batches manually:
+
+```python
+from gliner.infer_packing import pack_requests
+
+tokenizer = model.data_processor.transformer_tokenizer
+requests = tokenizer(texts, padding=False, truncation=True)["input_ids"]
+packed = pack_requests(
+    [{"input_ids": ids} for ids in requests],
+    packing,
+    pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
+)
+
+outputs = model.model.token_rep_layer(
+    packed.input_ids.to(model.device),
+    pair_attention_mask=packed.pair_attention_mask.to(model.device),
+)
+```
+
+Because the block-diagonal attention mask mirrors the segment boundaries, the downstream GLiNER components—including the RNN sequence encoder—receive unpacked tensors that match the original request order.
+
+#### Benchmarking packing gains
+
+The repository ships with a lightweight benchmark harness that can target either the raw encoder **or the full GLiNER stack (Transformer + RNN + scorer)**:
+
+```bash
+PYTHONPATH=. python bench/bench_infer_packing.py \
+  --pipeline gliner \
+  --model urchade/gliner_medium-v2.1 \
+  --scenario short_zipf \
+  --device cuda
+```
+
+Use `--pipeline encoder` to measure the base transformer only. The script prints JSON metrics and a tabular summary with padding ratios and speed-ups (tokens/s and examples/s).
+
 ### 🔌 Usage with spaCy
 
 GLiNER can be seamlessly integrated with spaCy. To begin, install the `gliner-spacy` library via pip:
